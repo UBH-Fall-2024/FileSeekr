@@ -1,0 +1,7 @@
+chroma_db/
+.github
+__pycache__/
+metadata.pkl
+app/node_modules/
+app/dist/
+app/venv/

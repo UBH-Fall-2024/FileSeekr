@@ -8,7 +8,7 @@
     "start": "electron .",
     "watch": "webpack --watch",
     "flask": "cd src/backend && python app.py",
-    "dev": "concurrently \"npm run flask\" \"npm run start\"",
+    "dev": "npm run start",
     "start:all": "npm run build && npm run dev"
   },
   "keywords": [],

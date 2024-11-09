@@ -156,7 +156,21 @@ input:checked + .slider:before {
     background: #1976D2;
 }
 
+
 /* THIS is the CSS for the OCR section*/
+
+.save-button.loading {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.save-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* Add to src/renderer/styles/settings.css */
+
 .ocr-section {
     display: flex;
     gap: 2rem;
@@ -188,6 +202,7 @@ input:checked + .slider:before {
 .ocr-item:hover .ocr-icon {
     color: #1565C0;
 }
+
 
 /* THE FOLLOWING IS FOR PATHS */
 /* src/renderer/styles/settings.css */
@@ -245,3 +260,20 @@ input:checked + .slider:before {
     background-color: #f1f1f1;
     color: #dc3545;
 }
+=======
+.error-message {
+    color: #ef4444;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #fee2e2;
+    border-radius: 4px;
+}
+
+.success-message {
+    color: #22c55e;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #dcfce7;
+    border-radius: 4px;
+}
+
