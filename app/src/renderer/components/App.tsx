@@ -40,7 +40,7 @@ const App: React.FC = () => {
             {currentPage === 'main' ? (
                 <div className="main-page">
                     <div className="header">
-                        <h1 className="title">AI-Powered File Similarity Finder</h1>
+                        <h1 className="title">FileSeekr: AI-Powered File Similarity Finder</h1>
                         <button className="settings-button" onClick={toggleSettings}>
                             ⚙️
                         </button>

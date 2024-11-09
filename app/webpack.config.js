@@ -34,6 +34,29 @@ const mainConfig = {
     }
 };
 
+// Preload script configuration - Modified to be more explicit
+const preloadConfig = {
+    ...commonConfig,
+    entry: {
+        preload: './src/preload/preload.ts',
+    },
+    target: 'electron-preload',
+    output: {
+        path: path.resolve(__dirname, 'dist'),
+        filename: '[name].js'
+    },
+    // Remove unnecessary rules
+    module: {
+        rules: [
+            {
+                test: /\.ts$/,
+                include: /src/,
+                use: [{ loader: 'ts-loader' }]
+            }
+        ]
+    }
+};
+
 // Renderer process configuration
 const rendererConfig = {
     ...commonConfig,
@@ -51,4 +74,4 @@ const rendererConfig = {
 };
 
 // Export array of configurations
-module.exports = [mainConfig, rendererConfig];
+module.exports = [mainConfig, preloadConfig, rendererConfig];
