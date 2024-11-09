@@ -1,10 +1,9 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
-module.exports = {
+// Create separate configurations for main and renderer processes
+const commonConfig = {
     mode: 'development',
-    entry: './src/renderer/index.tsx',
-    target: 'electron-renderer',
     devtool: 'source-map',
     module: {
         rules: [
@@ -19,6 +18,27 @@ module.exports = {
             }
         ]
     },
+    resolve: {
+        extensions: ['.js', '.ts', '.tsx', '.jsx']
+    }
+};
+
+// Main process configuration
+const mainConfig = {
+    ...commonConfig,
+    entry: './src/main/main.ts',
+    target: 'electron-main',
+    output: {
+        path: path.resolve(__dirname, 'dist'),
+        filename: 'main.js'
+    }
+};
+
+// Renderer process configuration
+const rendererConfig = {
+    ...commonConfig,
+    entry: './src/renderer/index.tsx',
+    target: 'electron-renderer',
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: 'renderer.js'
@@ -27,8 +47,8 @@ module.exports = {
         new HtmlWebpackPlugin({
             template: './src/renderer/index.html'
         })
-    ],
-    resolve: {
-        extensions: ['.js', '.ts', '.tsx']
-    }
+    ]
 };
+
+// Export array of configurations
+module.exports = [mainConfig, rendererConfig];

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import './styles.css';
 
 const App: React.FC = () => {
@@ -21,4 +21,20 @@ const App: React.FC = () => {
     );
 };
 
-ReactDOM.render(<App />, document.getElementById('root'));
+// Get the root element
+const container = document.getElementById('root');
+
+// Make sure container exists before creating root
+if (!container) {
+    throw new Error('Failed to find the root element');
+}
+
+// Create a root
+const root = createRoot(container);
+
+// Initial render
+root.render(
+    <React.StrictMode>
+        <App />
+    </React.StrictMode>
+);
