@@ -4,6 +4,10 @@
 
 ### How to run locally?
 
-`cd app`
-`npm run build`
+package.json does a lot of the scripting magic for us
 
+To run:
+
+cd app
+
+`npm run start:all`

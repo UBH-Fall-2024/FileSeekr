@@ -29,7 +29,7 @@ function createWindow() {
 }
 
 function startFlaskServer() {
-    const flaskScript = path.join(__dirname, '../backend/app.py');
+    const flaskScript = path.join(__dirname, '../src/backend/app.py');
     flaskProcess = spawn('python', [flaskScript]);
 
     flaskProcess.stdout.on('data', (data: any) => {
@@ -40,7 +40,6 @@ function startFlaskServer() {
         console.error(`Flask Error: ${data}`);
     });
 }
-
 app.whenReady().then(() => {
     startFlaskServer();
     createWindow();
