@@ -1,6 +1,7 @@
 // src/renderer/components/App.tsx
 import React, { useState, useEffect } from 'react';
 import Navbar from './Navbar';
+import Settings from './Settings';
 import '../styles/main.css';
 
 const App: React.FC = () => {
@@ -42,8 +43,11 @@ const App: React.FC = () => {
                 {error && <p className="error">{error}</p>}
                 {message && <p>Message from Flask: {message}</p>}
             </div>
+            <Settings />
         </div>
     );
 };
+
+
 
 export default App;
