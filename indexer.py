@@ -3,10 +3,11 @@ import pickle
 import argparse
 from pathlib import Path
 from typing import List
-from embedding import get_embedding
+from embedding import get_embedding, get_text_embedding
 import numpy as np
 import chromadb
 from chromadb import Client, Settings
+from chromadb.utils import embedding_functions
 
 class FileIndexer:
     def __init__(self, persist_directory: str):
@@ -16,11 +17,21 @@ class FileIndexer:
         Args:
             persist_directory (str): Directory to persist ChromaDB data
         """
-        self.client = Client(Settings(
-            persist_directory=persist_directory,
-            is_persistent=True
-        ))
-        self.collection = self.client.get_or_create_collection("files")
+        self.client = chromadb.PersistentClient(path=persist_directory)
+        
+        # Create a custom embedding function that wraps your CLIP embeddings
+        class CLIPEmbeddingFunction(embedding_functions.EmbeddingFunction):
+            def __call__(self, input_texts):
+                # For search queries, use text embedding
+                return [get_embedding(text) for text in input_texts]
+        
+        self.embedding_function = CLIPEmbeddingFunction()
+        
+        # Initialize collection with the embedding function
+        self.collection = self.client.get_or_create_collection(
+            name="file_collection",
+            embedding_function=self.embedding_function
+        )
         
         # Supported file extensions
         self.image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
@@ -53,7 +64,7 @@ class FileIndexer:
                     continue
                     
                 try:
-                    # Get embedding based on file type
+                    # Get embedding using your custom embedding function
                     embedding = get_embedding(str(file_path))
                     
                     # Store file type in metadata
@@ -117,6 +128,38 @@ class FileIndexer:
                     'path': metadata['path']
                 })
         return files
+
+    def search(self, query: str, limit: int = 5) -> list:
+        """
+        Search for files matching the query using CLIP text embeddings.
+        
+        Args:
+            query (str): The search term
+            limit (int): Maximum number of results to return
+        """
+        try:
+            # Get text embedding for the query
+            query_embedding = get_text_embedding(query)
+            
+            results = self.collection.query(
+                query_embeddings=[query_embedding.tolist()],
+                n_results=limit
+            )
+            
+            formatted_results = []
+            if results and len(results['documents'][0]) > 0:
+                for i, doc in enumerate(results['documents'][0]):
+                    formatted_results.append({
+                        'path': doc,
+                        'name': Path(doc).name,
+                        'similarity': results['distances'][0][i] if 'distances' in results else 0
+                    })
+            
+            return formatted_results
+            
+        except Exception as e:
+            print(f"Search error: {str(e)}")
+            return []
 
 def main():
     parser = argparse.ArgumentParser(description='Index files in specified directories')

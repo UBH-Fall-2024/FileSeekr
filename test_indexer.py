@@ -1,38 +1,31 @@
 from indexer import FileIndexer
-import os
+import argparse
 
-def test_pictures_indexing():
-    # Set up the indexer with ChromaDB persistence directory
-    persist_dir = "./chroma_db"
-    indexer = FileIndexer(persist_dir)
+def main():
+    parser = argparse.ArgumentParser(description='Index and search files using CLIP embeddings')
+    parser.add_argument('--dirs', nargs='+', required=True, help='Directories to index')
+    parser.add_argument('--search', type=str, help='Search query (optional)')
+    parser.add_argument('--db-path', default='./chroma_db', help='ChromaDB storage path')
     
-    # Define the pictures directory
-    pictures_dir = os.path.expanduser("~/Pictures")  # This expands to /Users/ecanton/Pictures
+    args = parser.parse_args()
     
-    # Define specific image extensions we want to index
-    image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+    # Initialize indexer
+    indexer = FileIndexer(args.db_path)
     
-    print(f"Starting to index directory: {pictures_dir}")
-    print(f"Looking for files with extensions: {', '.join(image_extensions)}")
+    # Index directories
+    indexer.index_directories(args.dirs)
     
-    # Start indexing
-    try:
-        indexer.index_directories([pictures_dir], image_extensions)
+    # Perform search if query provided
+    if args.search:
+        print(f"\nSearching for: {args.search}")
+        results = indexer.search(args.search)
         
-        # Get and display indexed directories
-        indexed_dirs = indexer.get_directories()
-        print("\nIndexed directories:")
-        for dir in indexed_dirs:
-            print(f"- {dir}")
-            
-        # Get and display files in the Pictures directory
-        files = indexer.get_files_in_directory(pictures_dir)
-        print(f"\nIndexed files in {pictures_dir}:")
-        for file in files:
-            print(f"- {file['name']} ({file['type']})")
-            
-    except Exception as e:
-        print(f"Error during indexing: {e}")
+        if results:
+            print("\nSearch results:")
+            for result in results:
+                print(f"- {result['name']} (Similarity: {result['similarity']:.4f})")
+        else:
+            print("No results found")
 
 if __name__ == "__main__":
-    test_pictures_indexing() 
+    main() 
