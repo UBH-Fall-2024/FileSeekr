@@ -1,4 +1,7 @@
 flask>=2.0.1
-numpy>=1.21.0
+numpy>=1.21.0,<3.0.0
 faiss-cpu>=1.7.2
-pydantic>=1.8.2
+pydantic>=1.8.2,<3.0.0
+torch>=2.0.0,<3.0.0
+open_clip>=2.2.0
+Pillow>=9.0.0
