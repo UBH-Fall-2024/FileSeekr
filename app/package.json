@@ -4,6 +4,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
+    "build:preload": "webpack --config webpack.config.js --entry ./src/preload/preload.ts --output-filename preload.js",
     "start": "electron .",
     "watch": "webpack --watch",
     "flask": "cd src/backend && python app.py",

@@ -188,3 +188,60 @@ input:checked + .slider:before {
 .ocr-item:hover .ocr-icon {
     color: #1565C0;
 }
+
+/* THE FOLLOWING IS FOR PATHS */
+/* src/renderer/styles/settings.css */
+/* Add to your existing CSS */
+
+.path-item {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    width: 100%;
+}
+
+.path-item input {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    background-color: #f8f9fa;
+    cursor: default;
+}
+
+.browse-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+}
+
+.browse-button:hover {
+    background: #1976D2;
+}
+
+.icon-button {
+    padding: 0.5rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.icon-button:hover {
+    background-color: #f1f1f1;
+    color: #dc3545;
+}

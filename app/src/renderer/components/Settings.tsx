@@ -27,6 +27,16 @@ const Settings: React.FC = () => {
         setPaths(paths.filter((_, i) => i !== index));
     };
 
+    const handleBrowse = async (index: number) => {
+        console.log("HEY I AM HERE")
+        const selectedPath = await window.electron.openDirectoryDialog();
+        if (selectedPath) {
+            const newPaths = [...paths];
+            newPaths[index] = selectedPath;
+            setPaths(newPaths);
+        }
+    };
+
     return (
         <div className="settings-container">
             <h1 className="settings-title">Settings</h1>
@@ -98,18 +108,33 @@ const Settings: React.FC = () => {
                 <div className="file-paths">
                     {paths.map((path, index) => (
                         <div key={index} className="path-item">
-                            <input type="text" value={path} onChange={e => {
-                                const newPaths = [...paths];
-                                newPaths[index] = e.target.value;
-                                setPaths(newPaths);
-                            }}/>
-                            <button className="icon-button" onClick={() => handleRemovePath(index)}>
-                                <Trash2 size={18}/>
+                            <input
+                                type="text"
+                                value={path}
+                                onChange={e => {
+                                    const newPaths = [...paths];
+                                    newPaths[index] = e.target.value;
+                                    setPaths(newPaths);
+                                }}
+                                placeholder="Select a directory..."
+                                readOnly  // Make it read-only since we're using the browse button
+                            />
+                            <button
+                                className="browse-button"
+                                onClick={() => handleBrowse(index)}
+                            >
+                                📁 Browse
+                            </button>
+                            <button
+                                className="icon-button"
+                                onClick={() => handleRemovePath(index)}
+                            >
+                                🗑️
                             </button>
                         </div>
                     ))}
                     <button className="add-path-button" onClick={handleAddPath}>
-                        <Plus size={18}/> Add Path
+                        ➕ Add Path
                     </button>
                 </div>
             </section>
