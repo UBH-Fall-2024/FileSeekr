@@ -1,7 +1,7 @@
 // src/renderer/components/App.tsx
 import React, { useState } from 'react';
 import Navbar from './Navbar';
-import Settings from './Settings';
+import Settings from './Settings';  // Make sure the path is correct
 import '../styles/main.css';
 import axios from 'axios';
 
@@ -71,6 +71,11 @@ const App: React.FC = () => {
                             <div className="results-list">
                                 {searchResults.map((result: SearchResult, index) => (
                                     <div key={index} className="result-item">
+                                        <div className={`result-thumbnail ${result.thumbnail?.startsWith('data:') ? '' : result.thumbnail || 'generic-file-icon'}`}>
+                                            {result.thumbnail?.startsWith('data:') && (
+                                                <img src={result.thumbnail} alt={result.filename} />
+                                            )}
+                                        </div>
                                         <h3>{result.filename}</h3>
                                         <p>Type: {result.filetype}</p>
                                         <p>Similarity: {(1 - result.similarity).toFixed(2)}</p>

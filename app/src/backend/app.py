@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from indexer import FileIndexer
 import os
@@ -6,6 +6,10 @@ import atexit
 import signal
 import sys
 import logging
+from PIL import Image
+import io
+import base64
+import mimetypes
 
 app = Flask(__name__)
 CORS(app)
@@ -32,6 +36,28 @@ def cleanup():
 # Register cleanup handlers
 atexit.register(cleanup)
 signal.signal(signal.SIGINT, lambda s, f: cleanup())
+
+def get_thumbnail(file_path, max_size=(100, 100)):
+    try:
+        if os.path.splitext(file_path)[1].lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
+            with Image.open(file_path) as img:
+                img.thumbnail(max_size)
+                buffer = io.BytesIO()
+                img.save(buffer, format='PNG')
+                encoded = base64.b64encode(buffer.getvalue()).decode()
+                return f"data:image/png;base64,{encoded}"
+        else:
+            # Return file type icon based on extension
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in ['.txt', '.md']:
+                return "text-file-icon"
+            elif ext in ['.py', '.js', '.html', '.css']:
+                return "code-file-icon"
+            else:
+                return "generic-file-icon"
+    except Exception as e:
+        print(f"Error generating thumbnail: {e}")
+        return None
 
 @app.route('/api/settings/paths', methods=['POST'])
 def update_paths():
@@ -91,7 +117,8 @@ def search():
                               else 'document',
                     'similarity': result['similarity'],
                     'size': file_stats.st_size,
-                    'path': file_path
+                    'path': file_path,
+                    'thumbnail': get_thumbnail(file_path)
                 })
             except (OSError, KeyError) as e:
                 print(f"Error processing result {result}: {e}")
