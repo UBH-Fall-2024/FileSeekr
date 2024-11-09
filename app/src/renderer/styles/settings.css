@@ -156,6 +156,16 @@ input:checked + .slider:before {
     background: #1976D2;
 }
 
+.save-button.loading {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.save-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
 /* Add to src/renderer/styles/settings.css */
 .ocr-section {
     display: flex;
@@ -187,4 +197,20 @@ input:checked + .slider:before {
 
 .ocr-item:hover .ocr-icon {
     color: #1565C0;
+}
+
+.error-message {
+    color: #ef4444;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #fee2e2;
+    border-radius: 4px;
+}
+
+.success-message {
+    color: #22c55e;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #dcfce7;
+    border-radius: 4px;
 }

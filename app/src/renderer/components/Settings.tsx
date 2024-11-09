@@ -2,6 +2,9 @@
 import React, { useState } from 'react';
 import { Camera, Cloud, Trash2, Plus, FileText, Image, Film, Music, Save } from 'lucide-react';
 import '../styles/settings.css';
+import axios from 'axios';
+
+const API_BASE_URL = 'http://127.0.0.1:5001';
 
 const Settings: React.FC = () => {
     const [paths, setPaths] = useState<string[]>(['C:/Users/YourName/Documents']);
@@ -19,12 +22,39 @@ const Settings: React.FC = () => {
 
     const [ocrEnabled, setOcrEnabled] = useState(false);
 
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+
     const handleAddPath = () => {
         setPaths([...paths, '']);
     };
 
     const handleRemovePath = (index: number) => {
         setPaths(paths.filter((_, i) => i !== index));
+    };
+
+    const handleSaveSettings = async () => {
+        setIsLoading(true);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            const response = await axios.post(`${API_BASE_URL}/api/settings/paths`, {
+                paths,
+                fileTypes
+            });
+
+            if (response.data.success) {
+                setSuccess('Settings saved successfully!');
+            } else {
+                setError('Failed to save settings');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An error occurred');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -168,8 +198,21 @@ const Settings: React.FC = () => {
                 </div>
             </section>
 
-            <button className="save-button">
-                <Save size={18}/> Save Settings
+            {error && <div className="error-message">{error}</div>}
+            {success && <div className="success-message">{success}</div>}
+            
+            <button 
+                className={`save-button ${isLoading ? 'loading' : ''}`}
+                onClick={handleSaveSettings}
+                disabled={isLoading}
+            >
+                {isLoading ? (
+                    'Indexing...'
+                ) : (
+                    <>
+                        <Save size={18}/> Save Settings
+                    </>
+                )}
             </button>
         </div>
     );

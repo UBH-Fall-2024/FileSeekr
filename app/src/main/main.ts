@@ -30,6 +30,12 @@ function createWindow() {
 
 function startFlaskServer() {
     const flaskScript = path.join(__dirname, '../src/backend/app.py');
+    
+    // Kill any existing Flask processes
+    if (flaskProcess) {
+        flaskProcess.kill();
+    }
+    
     flaskProcess = spawn('python', [flaskScript]);
 
     flaskProcess.stdout.on('data', (data: any) => {
@@ -39,7 +45,12 @@ function startFlaskServer() {
     flaskProcess.stderr.on('data', (data: any) => {
         console.error(`Flask Error: ${data}`);
     });
+
+    flaskProcess.on('close', (code: number) => {
+        console.log(`Flask process exited with code ${code}`);
+    });
 }
+
 app.whenReady().then(() => {
     startFlaskServer();
     createWindow();
@@ -57,5 +68,11 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
     if (mainWindow === null) {
         createWindow();
+    }
+});
+
+app.on('will-quit', () => {
+    if (flaskProcess) {
+        flaskProcess.kill();
     }
 });
