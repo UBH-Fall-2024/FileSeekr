@@ -155,3 +155,36 @@ input:checked + .slider:before {
 .save-button:hover {
     background: #1976D2;
 }
+
+/* Add to src/renderer/styles/settings.css */
+.ocr-section {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 1rem;
+}
+
+.ocr-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f5f5f5;
+    border-radius: 8px;
+    min-width: 200px;
+}
+
+.ocr-icon {
+    color: #1976D2;
+    font-size: 1.5rem;
+}
+
+/* OCR CSS FOR SETTINGS */
+.ocr-item {
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+    transition: all 0.2s ease;
+}
+
+.ocr-item:hover .ocr-icon {
+    color: #1565C0;
+}
