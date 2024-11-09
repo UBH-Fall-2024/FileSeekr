@@ -2,8 +2,8 @@ from flask import Flask, request, jsonify
 from pathlib import Path
 from pydantic import BaseModel
 import numpy as np
-import faiss
-import pickle
+import chromadb
+from chromadb import Client, Settings
 from typing import Optional
 from embedding import get_embedding
 
@@ -26,10 +26,12 @@ class SearchResponse(BaseModel):
 
 app = Flask(__name__)
 
-# Load FAISS index and metadata
-index = faiss.read_index("file_index.faiss")
-with open("file_metadata.pkl", "rb") as f:
-    file_metadata = pickle.load(f)
+# Load Chroma index and metadata
+client = Client(Settings(
+    persist_directory="./chroma_db",
+    is_persistent=True
+))
+collection = client.get_or_create_collection("files")
 
 class FileInfo(BaseModel):
     filename: str
@@ -59,35 +61,30 @@ def search():
     if not query:
         return jsonify({"error": "Query parameter 'q' is required."}), 400
     
-    # Get the embedding for the query
-    query_embedding = get_embedding(query)
+    try:
+        # Get the embedding for the query
+        query_embedding = get_embedding(query)
+        
+        # Search using Chroma
+        results = collection.query(
+            query_embeddings=[query_embedding.tolist()],
+            n_results=4
+        )
+        
+        search_results = []
+        for i, metadata in enumerate(results['metadatas'][0]):
+            search_results.append({
+                "similarity": float(results['distances'][0][i]),
+                "filename": metadata['name'],
+                "filetype": metadata['type'],
+                "path": metadata['path'],
+                "size": Path(metadata['path']).stat().st_size if Path(metadata['path']).exists() else 0,
+                "thumbnail": None
+            })
 
-    # Perform the search using FAISS
-    k = 4  # number of results to return
-    distances, indices = index.search(query_embedding.reshape(1, -1), k)
-
-    search_results = []
-    for i, idx in enumerate(indices[0]):
-        if idx != -1:  # FAISS uses -1 for empty slots
-            search_results.append(SearchResult(
-                distance=float(distances[0][i]),
-                name=file_metadata[idx]['name'],
-                path=file_metadata[idx]['path']
-            ))
-
-    ret = []
-    for result in search_results:
-        file_info = get_file_info(result.path)
-        ret.append(Result(
-            similarity=1 - (result.distance / 2),  # Convert distance to similarity
-            filename=file_info.filename,
-            filetype=file_info.file_type,
-            size=file_info.file_size,
-            path=result.path,
-            thumbnail=None
-        ))
-
-    return jsonify(SearchResponse(results=ret, len=len(ret)).model_dump())
+        return jsonify({"results": search_results, "len": len(search_results)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')

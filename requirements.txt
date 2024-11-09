@@ -1,7 +1,13 @@
+torch; sys_platform == "darwin"
+torchvision; sys_platform == "darwin"
+pytorch-lightning; sys_platform == "darwin"
+
+
+pillow>=9.0.0
+imagehash>=4.3.1
 flask>=2.0.1
-numpy>=1.21.0,<3.0.0
-faiss-cpu>=1.7.2
-pydantic>=1.8.2,<3.0.0
-torch>=2.0.0,<3.0.0
-open_clip>=2.2.0
-Pillow>=9.0.0
+numpy>=1.21.0
+pydantic>=1.8.2
+transformers>=4.30.0
+open-clip-torch>=2.20.0
+chromadb

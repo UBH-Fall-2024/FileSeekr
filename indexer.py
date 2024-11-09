@@ -1,71 +1,135 @@
 import os
 import pickle
+import argparse
 from pathlib import Path
+from typing import List
 from embedding import get_embedding
 import numpy as np
-import faiss
+import chromadb
+from chromadb import Client, Settings
 
-def index_files(root_dir: Path, index_path: str, metadata_path: str):
-    """
-    Traverse the root directory, extract embeddings for each file, and build a FAISS index.
+class FileIndexer:
+    def __init__(self, persist_directory: str):
+        """
+        Initialize the FileIndexer with ChromaDB persistence directory.
+        
+        Args:
+            persist_directory (str): Directory to persist ChromaDB data
+        """
+        self.client = Client(Settings(
+            persist_directory=persist_directory,
+            is_persistent=True
+        ))
+        self.collection = self.client.get_or_create_collection("files")
+        
+        # Supported file extensions
+        self.image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
+        self.text_extensions = {'.txt', '.md', '.py', '.js', '.html', '.css', '.json'}
+        
+        print(f"Connected to ChromaDB collection with {self.collection.count()} documents")
 
-    Args:
-        root_dir (Path): The root directory to start indexing.
-        index_path (str): Path to save the FAISS index.
-        metadata_path (str): Path to save the file metadata.
-    """
-    # Initialize lists to store metadata and embeddings
-    file_metadata = []
-    embeddings = []
+    def index_directories(self, directories: List[str], file_extensions: List[str] = None):
+        """
+        Index all supported files in the specified directories.
+        """
+        if file_extensions is None:
+            file_extensions = list(self.image_extensions | self.text_extensions)
+            
+        for directory in directories:
+            dir_path = Path(directory).resolve()
+            if not dir_path.exists():
+                print(f"Warning: Directory {directory} does not exist. Skipping...")
+                continue
+                
+            print(f"Indexing directory: {directory}")
+            
+            # Traverse the directory
+            for file_path in dir_path.rglob('*'):
+                if file_path.suffix.lower() not in file_extensions:
+                    continue
+                    
+                if self._is_file_indexed(str(file_path)):
+                    print(f"Skipping already indexed file: {file_path}")
+                    continue
+                    
+                try:
+                    # Get embedding based on file type
+                    embedding = get_embedding(str(file_path))
+                    
+                    # Store file type in metadata
+                    file_type = 'image' if file_path.suffix.lower() in self.image_extensions else 'text'
+                    
+                    # Add document to ChromaDB
+                    self.collection.add(
+                        embeddings=[embedding.tolist()],
+                        documents=[str(file_path)],
+                        metadatas=[{
+                            'name': file_path.name,
+                            'path': str(file_path),
+                            'timestamp': file_path.stat().st_mtime,
+                            'type': file_type
+                        }],
+                        ids=[str(file_path)]
+                    )
+                    
+                    print(f"Successfully embedded and indexed: {file_path} ({file_type})")
+                    
+                except Exception as e:
+                    print(f"Failed to process file: {file_path}. Error: {e}")
 
-    # Traverse the directory structure
-    for dirpath, _, filenames in os.walk(root_dir):
-        for filename in filenames:
-            file_path = Path(dirpath) / filename
-            try:
-                # Obtain embedding for the file
-                embedding = get_embedding(str(file_path))
-                embeddings.append(embedding)
+        print(f"Indexing complete. Total documents in collection: {self.collection.count()}")
 
-                # Store metadata
-                metadata = {
-                    'name': filename,
-                    'path': str(file_path)
-                }
-                file_metadata.append(metadata)
+    def _is_file_indexed(self, file_path: str) -> bool:
+        """Check if a file is already indexed based on its path."""
+        try:
+            result = self.collection.get(ids=[str(file_path)])
+            return len(result['ids']) > 0
+        except:
+            return False
 
-            except Exception as e:
-                print(f"Failed to index file: {file_path}. Error: {e}")
+    def get_directories(self):
+        """Get a list of all indexed directories"""
+        results = self.collection.get()
+        if not results['metadatas']:
+            return []
+        
+        # Extract unique directories from metadata
+        directories = set()
+        for metadata in results['metadatas']:
+            directory = os.path.dirname(metadata['path'])
+            directories.add(directory)
+        
+        return list(directories)
 
-    if not embeddings:
-        print("No embeddings found. Exiting indexing process.")
-        return
+    def get_files_in_directory(self, directory):
+        """Get all indexed files in a specific directory"""
+        results = self.collection.get()
+        if not results['metadatas']:
+            return []
+        
+        files = []
+        for metadata in results['metadatas']:
+            if directory in metadata['path']:
+                files.append({
+                    'name': metadata['name'],
+                    'type': metadata['type'],
+                    'relative_path': os.path.relpath(metadata['path'], directory),
+                    'path': metadata['path']
+                })
+        return files
 
-    # Convert embeddings to a NumPy array
-    embeddings_np = np.array(embeddings).astype('float32')
-
-    # Initialize FAISS index
-    dimension = embeddings_np.shape[1]
-    index = faiss.IndexFlatL2(dimension)
-
-    # Add embeddings to the index
-    index.add(embeddings_np)
-    print(f"FAISS index has been created with {index.ntotal} vectors.")
-
-    # Save the FAISS index
-    faiss.write_index(index, index_path)
-    print(f"FAISS index saved to {index_path}")
-
-    # Save the metadata
-    with open(metadata_path, 'wb') as f:
-        pickle.dump(file_metadata, f)
-    print(f"File metadata saved to {metadata_path}")
+def main():
+    parser = argparse.ArgumentParser(description='Index files in specified directories')
+    parser.add_argument('directories', nargs='+', help='Directories to index')
+    parser.add_argument('--extensions', nargs='+', 
+                      help='File extensions to index (default: all supported extensions)')
+    parser.add_argument('--persist-directory', default='./chroma_db',
+                      help='Directory to persist ChromaDB data')
+    
+    args = parser.parse_args()
+    
+    indexer = FileIndexer(args.persist_directory)
+    indexer.index_directories(args.directories, args.extensions)
 
 if __name__ == '__main__':
-    # Define paths
-    root_directory = Path.home()  # User's home directory
-    index_file = "file_index.faiss"
-    metadata_file = "file_metadata.pkl"
-
-    # Start indexing
-    index_files(root_directory, index_file, metadata_file)
+    main()
