@@ -26,6 +26,6 @@ def internal_error(error):
 if __name__ == '__main__':
     app.run(
         host='127.0.0.1',  # localhost
-        port=3000,         # Changed from 5000 to 5050
+        port=3000,         # this is changes to 3000 port
         debug=True
     )

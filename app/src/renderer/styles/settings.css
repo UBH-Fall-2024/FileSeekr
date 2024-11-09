@@ -1,4 +1,4 @@
-/* src/renderer/styles/settings.css */
+/*settings style for css*/
 .settings-container {
     padding: 2rem;
     max-width: 1200px;
@@ -156,7 +156,7 @@ input:checked + .slider:before {
     background: #1976D2;
 }
 
-/* Add to src/renderer/styles/settings.css */
+/* THIS is the CSS for the OCR section*/
 .ocr-section {
     display: flex;
     gap: 2rem;
