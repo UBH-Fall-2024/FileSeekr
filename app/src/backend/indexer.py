@@ -1,20 +1,11 @@
-import os
-import pickle
-import argparse
-from pathlib import Path
-from typing import List, Set, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from embedding import get_embedding, get_text_embedding
-import numpy as np
-import chromadb
-from chromadb import Client, Settings
-from chromadb.utils import embedding_functions
+from pathlib import Path
 from tqdm import tqdm
-import concurrent.futures
-import logging
-from PIL import Image
-import torch
-import subprocess
-import platform
+from typing import List, Set, Optional, Dict, Any
+import chromadb
+import numpy as np
+import logging, multiprocessing, os, platform, subprocess
 
 class FileIndexer:
     def __init__(self, persist_directory: str):
@@ -62,6 +53,10 @@ class FileIndexer:
         )
         self.logger = logging.getLogger(__name__)
 
+        # Set number of workers based on CPU cores
+        self.max_workers = max(1, multiprocessing.cpu_count() - 1)
+        self.batch_size = 128  # Increased batch size for better parallelization
+
     def _load_indexed_paths(self) -> Set[str]:
         try:
             results = self.collection.get()
@@ -71,76 +66,119 @@ class FileIndexer:
             print(f"Warning: Error loading indexed paths: {e}")
         return set()
 
+    def _process_files_parallel(self, files: List[Path]) -> List[Dict[str, Any]]:
+        """
+        Process multiple files in parallel using thread pools.
+        """
+        processed_items = []
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all files for processing
+            future_to_file = {
+                executor.submit(self._process_single_file, file_path): file_path 
+                for file_path in files
+            }
+            
+            # Process completed futures as they finish
+            for future in as_completed(future_to_file):
+                file_path = future_to_file[future]
+                try:
+                    result = future.result()
+                    if result is not None:
+                        processed_items.append(result)
+                except Exception as e:
+                    self.logger.error(f"Error processing {file_path}: {e}")
+        
+        return processed_items
+
+    def _process_single_file(self, file_path: Path) -> Optional[Dict[str, Any]]:
+        """
+        Process a single file and return its data.
+        """
+        try:
+            embedding = get_embedding(str(file_path))
+            if embedding is None:
+                return None
+                
+            suffix = file_path.suffix.lower()
+            file_type = 'image' if suffix in self.image_extensions else \
+                       'pdf' if suffix in self.pdf_extensions else 'text'
+            
+            return {
+                'embedding': embedding.tolist(),
+                'document': str(file_path),
+                'metadata': {
+                    'name': file_path.name,
+                    'path': str(file_path),
+                    'timestamp': file_path.stat().st_mtime,
+                    'type': file_type
+                },
+                'id': str(file_path)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error processing {file_path}: {e}")
+            return None
+
     def index_directories(self, directories: List[str], file_extensions: Optional[List[str]] = None):
         """
-        Index new files in the specified directories.
-        Skip files that are already indexed.
+        Index new files in the specified directories using parallel batch processing.
         """
         if file_extensions is None:
             file_extensions = list(self.image_extensions | self.text_extensions | self.pdf_extensions)
 
-        # Collect only new files to process
+        # Collect files to process
         files_to_process = []
         for directory in directories:
             try:
                 dir_path = Path(os.path.join(directory, '')).expanduser().resolve()
                 if not dir_path.exists():
-                    print(f"Warning: Directory {directory} does not exist. Skipping...")
                     continue
 
-                print(f"Scanning directory: {directory}")
-                pdf_count = 0
                 for file_path in dir_path.rglob('*'):
                     str_path = str(file_path)
-                    if file_path.is_file():
-                        if file_path.suffix.lower() == '.pdf':
-                            pdf_count += 1
-                            print(f"Found PDF: {str_path}")
-                        if (file_path.suffix.lower() in file_extensions and 
-                            str_path not in self.indexed_paths):
-                            files_to_process.append(file_path)
-                
-                print(f"Found {pdf_count} PDF files in {directory} and its subdirectories")
+                    if (file_path.is_file() and 
+                        file_path.suffix.lower() in file_extensions and 
+                        str_path not in self.indexed_paths):
+                        files_to_process.append(file_path)
 
             except Exception as e:
-                print(f"Error scanning directory {directory}: {e}")
                 continue
 
         if not files_to_process:
-            print("No new files to index.")
             return
 
-        print(f"\nFound {len(files_to_process)} new files to index")
-        
-        # Process files with progress bar
-        with tqdm(total=len(files_to_process), desc="Indexing files") as pbar:
-            for file_path in files_to_process:
-                try:
-                    if str(file_path) in self.indexed_paths:
-                        continue
+        total_files = len(files_to_process)
+        self.logger.info(f"Found {total_files} new files to index")
+        self.logger.info(f"Using {self.max_workers} worker threads")
 
-                    # Get embedding with proper error handling
-                    embedding = self._get_file_embedding(file_path)
-                    if embedding is None:
-                        continue
+        # Process files in parallel batches
+        with tqdm(total=total_files, desc="Indexing files") as pbar:
+            for i in range(0, total_files, self.batch_size):
+                batch = files_to_process[i:i + self.batch_size]
+                
+                # Process the batch in parallel
+                processed_items = self._process_files_parallel(batch)
+                
+                if processed_items:
+                    try:
+                        # Add batch to ChromaDB
+                        self.collection.add(
+                            embeddings=[item['embedding'] for item in processed_items],
+                            documents=[item['document'] for item in processed_items],
+                            metadatas=[item['metadata'] for item in processed_items],
+                            ids=[item['id'] for item in processed_items]
+                        )
+                        
+                        # Update indexed paths
+                        self.indexed_paths.update(item['document'] for item in processed_items)
+                        
+                    except Exception as e:
+                        self.logger.error(f"Error adding batch to collection: {e}")
+                
+                pbar.update(len(batch))
 
-                    # Add to ChromaDB
-                    self._add_to_collection(file_path, embedding)
-                    
-                except Exception as e:
-                    self.logger.error(f"Error processing {file_path}: {e}")
-                finally:
-                    pbar.update(1)
-
-        print(f"\nIndexing complete. Total documents in collection: {self.collection.count()}")
-
-    def _get_file_embedding(self, file_path: Path) -> Optional[np.ndarray]:
-        """Get embedding for a file using the embedding module"""
-        try:
-            return get_embedding(str(file_path))
-        except Exception as e:
-            self.logger.error(f"Failed to get embedding for {file_path}: {e}")
-            return None
+        self.logger.info(f"Indexing complete. Total documents in collection: {self.collection.count()}")
 
     def _add_to_collection(self, file_path: Path, embedding: np.ndarray):
         """Add a file and its embedding to the collection"""

@@ -1,16 +1,8 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from indexer import FileIndexer
-import os
-import atexit
-import signal
-import sys
-import logging
 from PIL import Image
-import io
-import base64
-import mimetypes
-import fitz  # PyMuPDF
+import atexit, base64, fitz, io, logging, mimetypes, os, signal, sys
 
 app = Flask(__name__)
 CORS(app)
