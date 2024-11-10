@@ -14,10 +14,26 @@ interface SearchResult {
     path: string;
 }
 
+
+
 const App: React.FC = () => {
     const [currentPage, setCurrentPage] = useState<'main' | 'settings'>('main');
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+
+    const [paths, setPaths] = useState<string[]>(['C:/Users/YourName/Documents']);
+    const [fileTypes, setFileTypes] = useState({
+        documents: true,
+        images: true,
+        videos: true,
+        audio: true
+    });
+    const [cloudServices, setCloudServices] = useState({
+        dropbox: true,
+        googleDrive: false,
+        oneDrive: false
+    });
+    const [ocrEnabled, setOcrEnabled] = useState(false);
 
     const toggleSettings = () => {
         setCurrentPage(currentPage === 'main' ? 'settings' : 'main');
@@ -113,7 +129,17 @@ const App: React.FC = () => {
                     <button className="back-button" onClick={toggleSettings}>
                         ← Back
                     </button>
-                    <Settings />
+                    <Settings
+                        paths={paths}
+                        setPaths={setPaths}
+                        fileTypes={fileTypes}
+                        setFileTypes={setFileTypes}
+                        cloudServices={cloudServices}
+                        setCloudServices={setCloudServices}
+                        ocrEnabled={ocrEnabled}
+                        setOcrEnabled={setOcrEnabled}
+                    />
+
                 </div>
             )}
         </div>
