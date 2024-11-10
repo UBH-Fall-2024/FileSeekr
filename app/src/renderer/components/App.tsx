@@ -35,6 +35,20 @@ const App: React.FC = () => {
         }
     };
 
+    const handleFileClick = async (filePath: string) => {
+        try {
+            const response = await axios.post('http://localhost:5001/open-file', {
+                path: filePath
+            });
+            
+            if (!response.data.success) {
+                console.error('Failed to open file');
+            }
+        } catch (error) {
+            console.error('Error opening file:', error);
+        }
+    };
+
     return (
         <div className="container">
             {currentPage === 'main' ? (
@@ -70,7 +84,12 @@ const App: React.FC = () => {
                         ) : (
                             <div className="results-list">
                                 {searchResults.map((result: SearchResult, index) => (
-                                    <div key={index} className="result-item">
+                                    <div 
+                                        key={index} 
+                                        className="result-item"
+                                        onClick={() => handleFileClick(result.path)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
                                         <div className={`result-thumbnail ${result.thumbnail?.startsWith('data:') ? '' : result.thumbnail || 'generic-file-icon'}`}>
                                             {result.thumbnail?.startsWith('data:') && (
                                                 <img src={result.thumbnail} alt={result.filename} />
@@ -80,7 +99,9 @@ const App: React.FC = () => {
                                         <p>Type: {result.filetype}</p>
                                         <p>Similarity: {(1 - result.similarity).toFixed(2)}</p>
                                         <p>Size: {(result.size / 1024).toFixed(2)} KB</p>
-                                        <p>Path: {result.path}</p>
+                                        <p className="file-path" title={result.path}>
+                                            Path: {result.path}
+                                        </p>
                                     </div>
                                 ))}
                             </div>

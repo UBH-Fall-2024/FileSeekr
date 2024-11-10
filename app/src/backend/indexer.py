@@ -10,6 +10,11 @@ from chromadb import Client, Settings
 from chromadb.utils import embedding_functions
 from tqdm import tqdm
 import concurrent.futures
+import logging
+from PIL import Image
+import torch
+import subprocess
+import platform
 
 class FileIndexer:
     def __init__(self, persist_directory: str):
@@ -31,7 +36,7 @@ class FileIndexer:
             )
         )
         
-        # Get or create collection - use a single collection name
+        # Get or create collection
         try:
             self.collection = self.client.get_collection("file_collection")
         except:
@@ -40,13 +45,24 @@ class FileIndexer:
         # Supported file extensions
         self.image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
         self.text_extensions = {'.txt', '.md', '.py', '.js', '.html', '.css', '.json'}
+        self.pdf_extensions = {'.pdf'}
         
         # Load existing indexed files
         self.indexed_paths = self._load_indexed_paths()
         print(f"Connected to ChromaDB at {persist_directory} with {len(self.indexed_paths)} indexed files")
 
+        # Configure logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(os.path.join(persist_directory, 'indexer.log')),
+                logging.StreamHandler()
+            ]
+        )
+        self.logger = logging.getLogger(__name__)
+
     def _load_indexed_paths(self) -> Set[str]:
-        """Load already indexed paths from the collection"""
         try:
             results = self.collection.get()
             if results['metadatas']:
@@ -61,24 +77,31 @@ class FileIndexer:
         Skip files that are already indexed.
         """
         if file_extensions is None:
-            file_extensions = list(self.image_extensions | self.text_extensions)
+            file_extensions = list(self.image_extensions | self.text_extensions | self.pdf_extensions)
 
         # Collect only new files to process
         files_to_process = []
         for directory in directories:
             try:
-                dir_path = Path(directory).expanduser().resolve()
+                dir_path = Path(os.path.join(directory, '')).expanduser().resolve()
                 if not dir_path.exists():
                     print(f"Warning: Directory {directory} does not exist. Skipping...")
                     continue
 
                 print(f"Scanning directory: {directory}")
+                pdf_count = 0
                 for file_path in dir_path.rglob('*'):
                     str_path = str(file_path)
-                    if (file_path.is_file() and 
-                        file_path.suffix.lower() in file_extensions and 
-                        str_path not in self.indexed_paths):
-                        files_to_process.append(file_path)
+                    if file_path.is_file():
+                        if file_path.suffix.lower() == '.pdf':
+                            pdf_count += 1
+                            print(f"Found PDF: {str_path}")
+                        if (file_path.suffix.lower() in file_extensions and 
+                            str_path not in self.indexed_paths):
+                            files_to_process.append(file_path)
+                
+                print(f"Found {pdf_count} PDF files in {directory} and its subdirectories")
+
             except Exception as e:
                 print(f"Error scanning directory {directory}: {e}")
                 continue
@@ -89,42 +112,66 @@ class FileIndexer:
 
         print(f"\nFound {len(files_to_process)} new files to index")
         
-        # Process new files with progress bar
-        with tqdm(total=len(files_to_process), desc="Indexing new files") as pbar:
+        # Process files with progress bar
+        with tqdm(total=len(files_to_process), desc="Indexing files") as pbar:
             for file_path in files_to_process:
                 try:
-                    # Skip if already indexed
                     if str(file_path) in self.indexed_paths:
                         continue
 
-                    # Get embedding using your custom embedding function
-                    embedding = get_embedding(str(file_path))
-                    
-                    # Store file type in metadata
-                    file_type = 'image' if file_path.suffix.lower() in self.image_extensions else 'text'
-                    
-                    # Add document to ChromaDB
-                    self.collection.add(
-                        embeddings=[embedding.tolist()],
-                        documents=[str(file_path)],
-                        metadatas=[{
-                            'name': file_path.name,
-                            'path': str(file_path),
-                            'timestamp': file_path.stat().st_mtime,
-                            'type': file_type
-                        }],
-                        ids=[str(file_path)]
-                    )
-                    
-                    # Add to indexed paths
-                    self.indexed_paths.add(str(file_path))
+                    # Get embedding with proper error handling
+                    embedding = self._get_file_embedding(file_path)
+                    if embedding is None:
+                        continue
+
+                    # Add to ChromaDB
+                    self._add_to_collection(file_path, embedding)
                     
                 except Exception as e:
-                    print(f"\nFailed to process file: {file_path}. Error: {e}")
-                
-                pbar.update(1)
+                    self.logger.error(f"Error processing {file_path}: {e}")
+                finally:
+                    pbar.update(1)
 
         print(f"\nIndexing complete. Total documents in collection: {self.collection.count()}")
+
+    def _get_file_embedding(self, file_path: Path) -> Optional[np.ndarray]:
+        """Get embedding for a file using the embedding module"""
+        try:
+            return get_embedding(str(file_path))
+        except Exception as e:
+            self.logger.error(f"Failed to get embedding for {file_path}: {e}")
+            return None
+
+    def _add_to_collection(self, file_path: Path, embedding: np.ndarray):
+        """Add a file and its embedding to the collection"""
+        try:
+            # Update file type detection to include PDFs
+            suffix = file_path.suffix.lower()
+            if suffix in self.image_extensions:
+                file_type = 'image'
+            elif suffix in self.pdf_extensions:
+                file_type = 'pdf'
+            else:
+                file_type = 'text'
+            
+            # Add document to ChromaDB
+            self.collection.add(
+                embeddings=[embedding.tolist()],
+                documents=[str(file_path)],
+                metadatas=[{
+                    'name': file_path.name,
+                    'path': str(file_path),
+                    'timestamp': file_path.stat().st_mtime,
+                    'type': file_type
+                }],
+                ids=[str(file_path)]
+            )
+            
+            # Add to indexed paths
+            self.indexed_paths.add(str(file_path))
+            
+        except Exception as e:
+            self.logger.error(f"Failed to add {file_path} to collection: {e}")
 
     def remove_path(self, path: str):
         """Remove a path and all its files from the index"""
@@ -193,34 +240,75 @@ class FileIndexer:
     def search(self, query: str, limit: int = 5) -> list:
         """
         Search for files matching the query using CLIP text embeddings.
-        
-        Args:
-            query (str): The search term
-            limit (int): Maximum number of results to return
         """
         try:
+            # Debug logging
+            self.logger.info(f"Searching for query: {query}")
+            self.logger.info(f"Collection count: {self.collection.count()}")
+
             # Get text embedding for the query
             query_embedding = get_text_embedding(query)
             
+            # Search ChromaDB
             results = self.collection.query(
                 query_embeddings=[query_embedding.tolist()],
-                n_results=limit
+                n_results=min(limit, self.collection.count()),
+                include=["metadatas", "distances", "documents"]
             )
             
+            # Format results
             formatted_results = []
-            if results and len(results['documents'][0]) > 0:
-                for i, doc in enumerate(results['documents'][0]):
+            if results and results['ids'] and len(results['ids'][0]) > 0:
+                for i in range(len(results['ids'][0])):
+                    metadata = results['metadatas'][0][i]
+                    distance = float(results['distances'][0][i])
+                    similarity = 1.0 - distance
+                    
                     formatted_results.append({
-                        'path': doc,
-                        'name': Path(doc).name,
-                        'similarity': results['distances'][0][i] if 'distances' in results else 0
+                        'path': metadata['path'],
+                        'name': metadata['name'],
+                        'type': metadata['type'],
+                        'similarity': round(similarity, 4)
                     })
+                
+                # Sort by similarity (highest first)
+                formatted_results.sort(key=lambda x: x['similarity'], reverse=True)
             
             return formatted_results
             
         except Exception as e:
-            print(f"Search error: {str(e)}")
+            self.logger.error(f"Search error: {str(e)}")
             return []
+
+    def open_file(self, file_path: str) -> bool:
+        """
+        Open a file using the default system application.
+        
+        Args:
+            file_path (str): Path to the file to open
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if not os.path.exists(file_path):
+                self.logger.error(f"File not found: {file_path}")
+                return False
+                
+            # Handle different operating systems
+            system = platform.system()
+            if system == 'Darwin':  # macOS
+                subprocess.run(['open', file_path])
+            elif system == 'Windows':
+                os.startfile(file_path)
+            else:  # Linux
+                subprocess.run(['xdg-open', file_path])
+                
+            self.logger.info(f"Opened file: {file_path}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error opening file {file_path}: {e}")
+            return False
 
     def __del__(self):
         """Cleanup when the indexer is destroyed"""
@@ -229,19 +317,3 @@ class FileIndexer:
                 self.client._system.close()
             except:
                 pass
-
-def main():
-    parser = argparse.ArgumentParser(description='Index files in specified directories')
-    parser.add_argument('directories', nargs='+', help='Directories to index')
-    parser.add_argument('--extensions', nargs='+', 
-                      help='File extensions to index (default: all supported extensions)')
-    parser.add_argument('--persist-directory', default='./chroma_db',
-                      help='Directory to persist ChromaDB data')
-    
-    args = parser.parse_args()
-    
-    indexer = FileIndexer(args.persist_directory)
-    indexer.index_directories(args.directories, args.extensions)
-
-if __name__ == '__main__':
-    main()

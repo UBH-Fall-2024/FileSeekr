@@ -10,6 +10,7 @@ from PIL import Image
 import io
 import base64
 import mimetypes
+import fitz  # PyMuPDF
 
 app = Flask(__name__)
 CORS(app)
@@ -39,20 +40,38 @@ signal.signal(signal.SIGINT, lambda s, f: cleanup())
 
 def get_thumbnail(file_path, max_size=(100, 100)):
     try:
-        if os.path.splitext(file_path)[1].lower() in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
             with Image.open(file_path) as img:
                 img.thumbnail(max_size)
                 buffer = io.BytesIO()
                 img.save(buffer, format='PNG')
                 encoded = base64.b64encode(buffer.getvalue()).decode()
                 return f"data:image/png;base64,{encoded}"
+        elif ext == '.pdf':
+            try:
+                doc = fitz.open(file_path)
+                if doc.page_count > 0:
+                    page = doc[0]
+                    pix = page.get_pixmap(matrix=fitz.Matrix(0.5, 0.5))
+                    img_data = pix.tobytes()
+                    img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
+                    img.thumbnail(max_size)
+                    buffer = io.BytesIO()
+                    img.save(buffer, format='PNG')
+                    encoded = base64.b64encode(buffer.getvalue()).decode()
+                    return f"data:image/png;base64,{encoded}"
+            except Exception as e:
+                print(f"PDF thumbnail generation error: {e}")
+                return "pdf-file-icon"
         else:
             # Return file type icon based on extension
-            ext = os.path.splitext(file_path)[1].lower()
             if ext in ['.txt', '.md']:
                 return "text-file-icon"
             elif ext in ['.py', '.js', '.html', '.css']:
                 return "code-file-icon"
+            elif ext == '.pdf':
+                return "pdf-file-icon"
             else:
                 return "generic-file-icon"
     except Exception as e:
@@ -65,19 +84,17 @@ def update_paths():
     paths = data.get('paths', [])
     file_types = data.get('fileTypes', {})
     
-    # Expand user paths (e.g., ~/Documents)
-    expanded_paths = [os.path.expanduser(path) for path in paths]
+    # Expand user paths and ensure trailing slash
+    expanded_paths = [os.path.join(os.path.expanduser(path), '') for path in paths]
     
     # Convert file types to extensions
     extensions = []
     if file_types.get('documents'):
-        extensions.extend(['.txt', '.md', '.py', '.js', '.html', '.css', '.json'])
+        extensions.extend(['.txt'])
     if file_types.get('images'):
-        extensions.extend(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'])
-    if file_types.get('videos'):
-        extensions.extend(['.mp4', '.avi', '.mov', '.wmv'])
-    if file_types.get('audio'):
-        extensions.extend(['.mp3', '.wav', '.ogg', '.m4a'])
+        extensions.extend(['.jpg', '.jpeg', '.png'])
+    if file_types.get('pdfs'):
+        extensions.extend(['.pdf'])
 
     try:
         # Index new paths (existing files will be skipped)
@@ -89,6 +106,21 @@ def update_paths():
 @app.route('/')
 def home():
     return "FileSeekr API is running!"
+
+@app.route('/open-file', methods=['POST'])
+def open_file_endpoint():
+    try:
+        data = request.json
+        file_path = data.get('path')
+        
+        if not file_path:
+            return jsonify({'success': False, 'error': 'No file path provided'}), 400
+            
+        success = indexer.open_file(file_path)
+        return jsonify({'success': success})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/search', methods=['GET'])
 def search():
@@ -110,11 +142,18 @@ def search():
                 file_path = result['path']
                 file_stats = os.stat(file_path)
                 
+                # Update filetype detection to properly handle PDFs
+                ext = os.path.splitext(file_path)[1].lower()
+                if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
+                    filetype = 'image'
+                elif ext == '.pdf':
+                    filetype = 'pdf'
+                else:
+                    filetype = 'document'
+                
                 formatted_results.append({
                     'filename': os.path.basename(file_path),
-                    'filetype': 'image' if any(file_path.lower().endswith(ext) 
-                                            for ext in ['.jpg','.jpeg','.png','.gif','.bmp']) 
-                              else 'document',
+                    'filetype': filetype,
                     'similarity': result['similarity'],
                     'size': file_stats.st_size,
                     'path': file_path,

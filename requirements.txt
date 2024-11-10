@@ -1,1 +1,19 @@
- 
+torch; sys_platform == "darwin"
+torchvision; sys_platform == "darwin"
+pytorch-lightning; sys_platform == "darwin"
+
+
+pillow>=9.0.0
+imagehash>=4.3.1
+flask==3.0.2
+flask-cors==4.0.0
+numpy>=1.21.0
+pydantic>=1.8.2
+transformers>=4.30.0
+open-clip-torch>=2.20.0
+chromadb==0.4.22
+sentence-transformers
+tqdm==4.66.1
+PyMuPDF==1.23.8
+openvino>=2023.1.0
+transformers>=4.30.0
